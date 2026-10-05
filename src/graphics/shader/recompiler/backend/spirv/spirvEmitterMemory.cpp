@@ -170,18 +170,18 @@ uint32_t FaultElementPointer(EmitterState& state, uint32_t index) {
 // The BufferCache caching page of a guest address: the index of its BDA page table entry and of
 // its bits in the fault buffer.
 uint32_t BdaPageIndex(EmitterState& state, uint32_t address) {
-	const auto type = TypeScalarU64(state);
+	const auto type = TypeU64(state);
 	const auto extended =
 	    Binary(state, spv::OpUGreaterThanEqual, TypeBool(state), address,
-	           ConstantDeviceAddress(state, LibKernel::Memory::kExtendedMemoryBase));
+	           ConstantU64(state, LibKernel::Memory::kExtendedMemoryBase));
 	const auto packed =
 	    Select(state, type, extended,
 	           Binary(state, spv::OpISub, type, address,
-	                  ConstantDeviceAddress(state, LibKernel::Memory::kExtendedMemoryBase -
+	                  ConstantU64(state, LibKernel::Memory::kExtendedMemoryBase -
 	                                                   LOWER_ADDRESS_SIZE)),
 	           address);
 	const auto page64 = Binary(state, spv::OpShiftRightLogical, type, packed,
-	                           ConstantDeviceAddress(state, BufferCache::CACHING_PAGEBITS));
+	                           ConstantU64(state, BufferCache::CACHING_PAGEBITS));
 	return Unary(state, spv::OpUConvert, TypeU32(state), page64);
 }
 
@@ -987,11 +987,11 @@ void StoreBdaDword(ValueEmitContext& ctx, uint32_t address, uint32_t active, uin
 	auto& state = ctx.state;
 	EmitIfCondition(state, active, [&]() {
 		// RDNA2 DWORD accesses ignore the two low address bits.
-		const auto aligned = Binary(state, spv::OpBitwiseAnd, TypeScalarU64(state), address,
-		                            ConstantDeviceAddress(state, ~uint64_t {3}));
+		const auto aligned = Binary(state, spv::OpBitwiseAnd, TypeU64(state), address,
+		                            ConstantU64(state, ~uint64_t {3}));
 		const auto bda     = GetBdaPointer(state, aligned);
 		const auto present =
-		    Binary(state, spv::OpINotEqual, TypeBool(state), bda, ConstantDeviceAddress(state, 0));
+		    Binary(state, spv::OpINotEqual, TypeBool(state), bda, ConstantU64(state, 0));
 		EmitIfCondition(state, present, [&]() {
 			const auto pointer = state.builder.AllocateId();
 			state.builder.AddFunction(spv::OpConvertUToPtr, TypePhysicalU32Pointer(state), pointer,
@@ -1010,8 +1010,8 @@ void StoreIndirectBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t c
 		const auto buffer = PrepareIndirectBuffer(ctx, inst);
 		const auto valid_format =
 		    Binary(state, spv::OpINotEqual, TypeBool(state), buffer.format, ConstantU32(state, 0));
-		const auto base = Binary(state, spv::OpBitwiseAnd, TypeScalarU64(state), buffer.address,
-		                         ConstantDeviceAddress(state, ~uint64_t {3}));
+		const auto base = Binary(state, spv::OpBitwiseAnd, TypeU64(state), buffer.address,
+		                         ConstantU64(state, ~uint64_t {3}));
 		const auto data = ctx.Arg(inst, inst.NumArgs() - 2);
 		for (uint32_t component = 0; component < components; component++) {
 			auto value = data;
@@ -1022,8 +1022,8 @@ void StoreIndirectBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t c
 			}
 			const auto address = component == 0u
 			                         ? base
-			                         : Binary(state, spv::OpIAdd, TypeScalarU64(state), base,
-			                                  ConstantDeviceAddress(state, component * 4u));
+			                         : Binary(state, spv::OpIAdd, TypeU64(state), base,
+			                                  ConstantU64(state, component * 4u));
 			StoreBdaDword(
 			    ctx, address,
 			    AndCondition(state, valid_format,
